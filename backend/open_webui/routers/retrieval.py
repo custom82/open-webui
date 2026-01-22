@@ -11,6 +11,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterator, List, Optional, Sequence, Union
 
+from packaging import version
+
 from fastapi import (
     Depends,
     FastAPI,
@@ -127,6 +129,31 @@ log = logging.getLogger(__name__)
 ##########################################
 
 
+def allow_huggingface_hub_v1() -> bool:
+    try:
+        import huggingface_hub
+        from transformers.utils import versions as transformers_versions
+    except Exception:
+        return False
+
+    if version.parse(huggingface_hub.__version__) < version.parse("1.0.0"):
+        return False
+
+    if getattr(transformers_versions.require_version, "_open_webui_patched", False):
+        return True
+
+    original_require_version = transformers_versions.require_version
+
+    def require_version(requirement, hint=None):
+        if requirement.startswith("huggingface-hub"):
+            return
+        return original_require_version(requirement, hint)
+
+    require_version._open_webui_patched = True
+    transformers_versions.require_version = require_version
+    return True
+
+
 def get_ef(
     engine: str,
     embedding_model: str,
@@ -145,7 +172,18 @@ def get_ef(
                 model_kwargs=SENTENCE_TRANSFORMERS_MODEL_KWARGS,
             )
         except ImportError as e:
-            log.warning(f"SentenceTransformer unavailable: {e}")
+            if "huggingface-hub" in str(e) and allow_huggingface_hub_v1():
+                from sentence_transformers import SentenceTransformer
+
+                ef = SentenceTransformer(
+                    get_model_path(embedding_model, auto_update),
+                    device=DEVICE_TYPE,
+                    trust_remote_code=RAG_EMBEDDING_MODEL_TRUST_REMOTE_CODE,
+                    backend=SENTENCE_TRANSFORMERS_BACKEND,
+                    model_kwargs=SENTENCE_TRANSFORMERS_MODEL_KWARGS,
+                )
+            else:
+                log.warning(f"SentenceTransformer unavailable: {e}")
         except Exception as e:
             log.debug(f"Error loading SentenceTransformer: {e}")
 
@@ -210,8 +248,25 @@ def get_rf(
                         ),
                     )
                 except ImportError as e:
-                    log.warning(f"CrossEncoder unavailable: {e}")
-                    return None
+                    if "huggingface-hub" in str(e) and allow_huggingface_hub_v1():
+                        import sentence_transformers
+                        import torch
+
+                        rf = sentence_transformers.CrossEncoder(
+                            get_model_path(reranking_model, auto_update),
+                            device=DEVICE_TYPE,
+                            trust_remote_code=RAG_RERANKING_MODEL_TRUST_REMOTE_CODE,
+                            backend=SENTENCE_TRANSFORMERS_CROSS_ENCODER_BACKEND,
+                            model_kwargs=SENTENCE_TRANSFORMERS_CROSS_ENCODER_MODEL_KWARGS,
+                            activation_fn=(
+                                torch.nn.Sigmoid()
+                                if SENTENCE_TRANSFORMERS_CROSS_ENCODER_SIGMOID_ACTIVATION_FUNCTION
+                                else None
+                            ),
+                        )
+                    else:
+                        log.warning(f"CrossEncoder unavailable: {e}")
+                        return None
                 except Exception as e:
                     log.error(f"CrossEncoder: {e}")
                     raise Exception(ERROR_MESSAGES.DEFAULT("CrossEncoder error"))
