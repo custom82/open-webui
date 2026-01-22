@@ -268,6 +268,9 @@ def get_rf(
                         log.warning(f"CrossEncoder unavailable: {e}")
                         return None
                 except Exception as e:
+                    if "huggingface-hub" in str(e):
+                        log.warning(f"CrossEncoder unavailable: {e}")
+                        return None
                     log.error(f"CrossEncoder: {e}")
                     raise Exception(ERROR_MESSAGES.DEFAULT("CrossEncoder error"))
 
