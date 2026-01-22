@@ -33,6 +33,8 @@ class ChromaClient(VectorDBBase):
         settings_dict = {
             "allow_reset": True,
             "anonymized_telemetry": False,
+            "chroma_product_telemetry_impl": "open_webui.retrieval.vector.dbs.chroma_telemetry.NoopProductTelemetry",
+            "chroma_telemetry_impl": "open_webui.retrieval.vector.dbs.chroma_telemetry.NoopProductTelemetry",
         }
         if CHROMA_CLIENT_AUTH_PROVIDER is not None:
             settings_dict["chroma_client_auth_provider"] = CHROMA_CLIENT_AUTH_PROVIDER
