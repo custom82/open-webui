@@ -134,9 +134,9 @@ def get_ef(
 ):
     ef = None
     if embedding_model and engine == "":
-        from sentence_transformers import SentenceTransformer
-
         try:
+            from sentence_transformers import SentenceTransformer
+
             ef = SentenceTransformer(
                 get_model_path(embedding_model, auto_update),
                 device=DEVICE_TYPE,
@@ -144,6 +144,8 @@ def get_ef(
                 backend=SENTENCE_TRANSFORMERS_BACKEND,
                 model_kwargs=SENTENCE_TRANSFORMERS_MODEL_KWARGS,
             )
+        except ImportError as e:
+            log.warning(f"SentenceTransformer unavailable: {e}")
         except Exception as e:
             log.debug(f"Error loading SentenceTransformer: {e}")
 
@@ -191,10 +193,10 @@ def get_rf(
                     log.error(f"ExternalReranking: {e}")
                     raise Exception(ERROR_MESSAGES.DEFAULT(e))
             else:
-                import sentence_transformers
-                import torch
-
                 try:
+                    import sentence_transformers
+                    import torch
+
                     rf = sentence_transformers.CrossEncoder(
                         get_model_path(reranking_model, auto_update),
                         device=DEVICE_TYPE,
@@ -207,6 +209,9 @@ def get_rf(
                             else None
                         ),
                     )
+                except ImportError as e:
+                    log.warning(f"CrossEncoder unavailable: {e}")
+                    return None
                 except Exception as e:
                     log.error(f"CrossEncoder: {e}")
                     raise Exception(ERROR_MESSAGES.DEFAULT("CrossEncoder error"))
